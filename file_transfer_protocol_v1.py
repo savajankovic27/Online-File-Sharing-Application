@@ -106,48 +106,55 @@ class Server:
 
     def connection_handler(self, client):
         connection, address = client
-        print("-" * 72)
-        print("Connection received from {}.".format(address))
+        print(f"Handling connection from {address}.")
 
-        # Read the command and see if it is a GET.
-        cmd = int.from_bytes(connection.recv(CMD_FIELD_LEN), byteorder='big')
-        if cmd != CMD["GET"]:
-            print("GET command not received!")
-            return
-        # The command is good. Now read and decode the requested
-        # filename.
-        filename_bytes = connection.recv(Server.RECV_SIZE)
-        filename = filename_bytes.decode(MSG_ENCODING)
+        while True:
+            try:
+                # Receive command (1 byte)
+                cmd = connection.recv(CMD_FIELD_LEN)
+                if not cmd:
+                    break  # Client disconnected
 
-        # Open the requested file and get set to send it to the
-        # client.
-        try:
-            file = open(filename, 'r').read()
-        except FileNotFoundError:
-            print(Server.FILE_NOT_FOUND_MSG)
-            connection.close()                   
-            return
+                cmd_int = int.from_bytes(cmd, byteorder='big')
 
-        # Encode the file contents into bytes, record its size and
-        # generate the file size field used for transmission.
-        file_bytes = file.encode(MSG_ENCODING)
-        file_size_bytes = len(file_bytes)
-        file_size_field = file_size_bytes.to_bytes(FILE_SIZE_FIELD_LEN, byteorder='big')
+                if cmd_int == CMD["LIST"]:
+                    # Get list of files and send to client
+                    file_list = os.listdir(SHARED_DIR)
+                    response = "\n".join(file_list).encode(MSG_ENCODING)
+                    connection.sendall(len(response).to_bytes(8, 'big') + response)
 
-        # Create the packet to be sent with the header field.
-        pkt = file_size_field + file_bytes
-        
-        try:
-            # Send the packet to the connected client.
-            connection.sendall(pkt)
-            # print("Sent packet bytes: \n", pkt)
-            print("Sending file: ", Server.REMOTE_FILE_NAME)
-        except socket.error:
-            # If the client has closed the connection, close the
-            # socket on this end.
-            print("Closing client connection ...")
-            connection.close()
-            return
+                elif cmd_int == CMD["GET"]:
+                    # Handle GET (Already implemented)
+                    filename = connection.recv(Server.RECV_SIZE).decode(MSG_ENCODING)
+                    filepath = os.path.join(SHARED_DIR, filename)
+                    
+                    if os.path.exists(filepath):
+                        with open(filepath, 'rb') as f:
+                            file_data = f.read()
+                        connection.sendall(len(file_data).to_bytes(8, 'big') + file_data)
+                    else:
+                        connection.sendall(b"FILE_NOT_FOUND")
+
+                elif cmd_int == CMD["PUT"]:
+                    # Handle file upload
+                    filename = connection.recv(Server.RECV_SIZE).decode(MSG_ENCODING)
+                    file_size = int.from_bytes(connection.recv(8), 'big')
+                    received_data = connection.recv(file_size)
+                    
+                    with open(os.path.join(SHARED_DIR, filename), 'wb') as f:
+                        f.write(received_data)
+                    
+                    connection.sendall(b"UPLOAD_SUCCESS")
+
+                elif cmd_int == CMD["BYE"]:
+                    print(f"Client {address} disconnected.")
+                    break
+
+            except Exception as e:
+                print(f"Error with client {address}: {e}")
+                break
+
+        connection.close()
 
 ########################################################################
 # CLIENT
@@ -164,8 +171,30 @@ class Client:
     def __init__(self):
         self.get_socket()
         self.connect_to_server()
-        self.get_file()
-
+        self.run()
+        
+        
+    def run(self):
+        while True:
+            command = input("Enter command (list, get<file>, put<file>,bye): ").strip().split()
+            if command[0] == "list":
+                self.list_files()
+            elif command[0] == "get" and len(command) > 1:
+                self.get_file(command[1])
+            elif command[0] == "put" and len(command) > 1:
+                self.put_file(command[1])
+            elif command[0] == "bye":
+                self.disconnect()
+                break
+            else:
+                print("Invalid command!")
+            
+    def list_files(self):
+        self.socket.sendall(CMD["LIST"].to_bytes(1,'big'))
+        file_list_size = int.from_bytes(self.socket.recv(8), 'big')
+        file_list = self.socket.recv(file_list_size).decode(MSG_ENCODING)
+        print("Shared Files :\n" + file_list)
+    
     def get_socket(self):
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
