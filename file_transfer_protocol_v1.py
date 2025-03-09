@@ -50,7 +50,12 @@ FILE_SIZE_FIELD_LEN  = 8 # 8 byte file size field.
 # be a 1-byte integer. For now, we only define the "GET" command,
 # which tells the server to send a file.
 
-CMD = { "GET" : 2 }
+CMD = { 
+        "LIST": 1,
+        "GET" : 2 ,
+        "PUT" : 3,
+        "BYE" : 4
+       }
 
 MSG_ENCODING = "utf-8"
     
@@ -58,7 +63,7 @@ MSG_ENCODING = "utf-8"
 # SERVER
 ########################################################################
 
-SHARED_DIR = "shared_files"
+SHARED_DIR = ""
 
 class Server:
 
@@ -189,6 +194,7 @@ class Client:
             else:
                 print("Invalid command!")
             
+    
     def list_files(self):
         self.socket.sendall(CMD["LIST"].to_bytes(1,'big'))
         file_list_size = int.from_bytes(self.socket.recv(8), 'big')
