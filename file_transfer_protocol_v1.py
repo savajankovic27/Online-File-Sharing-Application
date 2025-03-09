@@ -15,6 +15,9 @@
 # file using the filename LOCAL_FILE_NAME. This is so that you can run
 # a server and client from the same directory without overwriting
 # files.
+
+# Running the server side, simply paste: python3 file_transfer_protocol_v1.py -r server
+# Running the client side, paste : python3 file_transfer_protocol_v1.py -r client
 #
 ########################################################################
 
