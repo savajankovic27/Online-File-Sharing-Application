@@ -23,6 +23,7 @@
 
 import socket
 import argparse
+import os 
 
 ########################################################################
 
@@ -57,11 +58,13 @@ MSG_ENCODING = "utf-8"
 # SERVER
 ########################################################################
 
+SHARED_DIR = "shared_files"
+
 class Server:
 
     HOSTNAME = "127.0.0.1"
 
-    PORT = 50000
+    PORT = 30001
     RECV_SIZE = 1024
     BACKLOG = 5
 
@@ -69,6 +72,9 @@ class Server:
 
     # This is the file that the client will request using a GET.
     REMOTE_FILE_NAME = "remotefile.txt"
+    
+    if not os.path.exists(SHARED_DIR):
+        os.makedirs(SHARED_DIR)
 
     def __init__(self):
         self.create_listen_socket()
@@ -81,17 +87,20 @@ class Server:
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.socket.bind((Server.HOSTNAME, Server.PORT))
             self.socket.listen(Server.BACKLOG)
-            print("Listening on port {} ...".format(Server.PORT))
+            print(f"Listening on {Server.HOSTNAME}:{Server.PORT}...")
         except Exception as msg:
-            print(msg)
+            print(f"Socket error:{msg}")
             exit()
 
     def process_connections_forever(self):
+        print("Connecting to the client right now...")
         try:
             while True:
-                self.connection_handler(self.socket.accept())
+                client_socket, client_address = self.socket.accept();
+                print(f"New connection from {client_address}")
+                self.connection_handler((client_socket, client_address))
         except KeyboardInterrupt:
-            print()
+            print("Couldn't find a client")
         finally:
             self.socket.close()
 
@@ -105,7 +114,6 @@ class Server:
         if cmd != CMD["GET"]:
             print("GET command not received!")
             return
-
         # The command is good. Now read and decode the requested
         # filename.
         filename_bytes = connection.recv(Server.RECV_SIZE)
